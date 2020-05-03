@@ -32,13 +32,20 @@ This dashboard requires the apps to be instrumented with `Kamon 2.x` and `kamon-
 ### Generate dashboards
 
 1. Make sure you have [Jsonnet] and [GNU Make] installed.
-2. Clone this repo and stand in the directory `./jsonnet`.
-3. Execute `make`.
-4. The dashboard Jsons will be placed at `./jsonnet/out/grafana`
+2. Clone this repo and initialize the submodule (depends on [Grafonnet-lib]):
+```bash
+git clone git@github.com:cspinetta/kamon-grafana-dashboards.git
+git submodule init
+git submodule update
+```
+3. Go to directory `jsonnet`.
+4. Execute `make` to build all dashboards.
 
-### Testing and formatting
+Jsons of dashboards will be placed at `./jsonnet/out/grafana`
 
-* Tests the jsonnet's are properly formatted.
+### Formatting
+
+* Tests the jsonnets are properly formatted.
 ```bash
 make test
 ```
@@ -51,3 +58,4 @@ make fix-fmt
 [Kamon]: https://kamon.io/
 [Jsonnet]: https://jsonnet.org/
 [GNU Make]: https://www.gnu.org/software/make/
+[Grafonnet-lib]: https://github.com/grafana/grafonnet-lib
