@@ -14,20 +14,17 @@ Jobs and instances are Prometheus terms. [More info](https://prometheus.io/docs/
 
 ### Dashboards
 
-* System metrics
+* **System metrics**
 
 This dashboard requires the apps to be instrumented with `Kamon 2.x` and `kamon-system-metrics` module.
 
 **Some screenshots:**
 
 ![dash-system-overview](assets/system-metrics-dash_overview.png)
-> *System overview*
 
 ![dash-system-disk](assets/system-metrics-dash_health.png)
-> *Load / Health row*
 
 ![dash-system-disk](assets/system-metrics-dash_disks.png)
-> *Disks metrics row*
 
 ### Generate dashboards
 
