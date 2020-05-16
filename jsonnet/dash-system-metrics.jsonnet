@@ -9,6 +9,47 @@ local gauge = grafana.gauge;
 local prometheus = grafana.prometheus;
 local kamon_grafana = import 'kamon_grafana.libsonnet';
 
+local common_extended_panel(
+  title,
+  description=null,
+  format,
+  legend_show=true,
+  legend_values=true,
+  legend_min=true,
+  legend_max=true,
+  legend_current=true,
+  legend_total=false,
+  legend_avg=true,
+  legend_alignAsTable=true,
+  legend_rightSide=false,
+  legend_sort='max',
+  legend_sortDesc=true,
+  lines=true,
+  linewidth=1,
+  points=false,
+  pointradius=2,
+      ) =
+  {} + graphPanel.new(
+    title=title,
+    description=description,
+    format=format,
+    legend_show=legend_show,
+    legend_values=legend_values,
+    legend_min=legend_min,
+    legend_max=legend_max,
+    legend_current=legend_current,
+    legend_total=legend_total,
+    legend_avg=legend_avg,
+    legend_alignAsTable=legend_alignAsTable,
+    legend_rightSide=legend_rightSide,
+    legend_sort=legend_sort,
+    legend_sortDesc=legend_sortDesc,
+    lines=lines,
+    linewidth=linewidth,
+    points=points,
+    pointradius=pointradius,
+  );
+
 // Grafana color: https://grafana.com/docs/grafana/latest/packages_api/data/color/
 
 grafana.dashboard.new(
@@ -19,54 +60,21 @@ grafana.dashboard.new(
   tags=['kamon', 'prometheus', 'system-metrics'],
 )
 .addTemplate(
-  grafana.template.datasource(
-    'PROMETHEUS_DS',
-    'prometheus',
-    'Prometheus',
-    hide='label',
-  )
+  kamon_grafana.template.prometheus_datasource()
 )
 .addTemplate(
-  template.new(
-    'job',
-    '$PROMETHEUS_DS',
+  kamon_grafana.template.job(
     query='label_values({component="host"}, cluster)',
-    label='Job',
-    refresh='load',
-    includeAll=true,
-    multi=true,
-  )
+  ),
 )
 .addTemplate(
-  template.new(
-    'job',
-    '$PROMETHEUS_DS',
-    query='label_values({component="host"}, cluster)',
-    label='Job',
-    refresh='load',
-    includeAll=true,
-    multi=true,
-  )
-)
-.addTemplate(
-  template.new(
-    'instance',
-    '$PROMETHEUS_DS',
-    query='label_values(up{job=~"$job"},instance)',
-    label='Instance',
-    refresh='load',
+  kamon_grafana.template.instance(
     includeAll=false,
     multi=false,
-  )
+  ),
 )
 .addTemplate(
-  template.interval(
-    name='interval',
-    query='1m,2m,5m,10m,30m,1h,6h,12h,1d,7d,14d,30d',
-    current='1m',
-    label='Interval',
-    auto_count=0,
-  )
+  kamon_grafana.template.interval()
 )
 .addPanel(
   row.new(
@@ -112,10 +120,10 @@ grafana.dashboard.new(
     calc='lastNotNull',
     unit_format='percentunit',
     thresholds=kamon_grafana.stats_thresholds.new(
-      'absolute',
+      'percentage',
       [
-        { color: 'green', value: null },
-        { color: 'red', value: 0.8 },
+        { color: 'semi-dark-green', value: null },
+        { color: 'semi-dark-red', value: 80 },
       ],
     ),
   )
@@ -452,22 +460,12 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 11 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='System load average in 1m / 5m / 15m',
-    description='Tracks the system load average in 1m / 5m / 15m.',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
+    description=
+    'Tracks the system load average in 1m / 5m / 15m.\n\nThey indicate the average number of tasks (processes) wanting to run in the last 1m / 5m / 15m.\n\nOn Linux systems, these numbers is approximated and include processes wanting to run on the CPUs, as well as processes blocked in uninterruptible I/O (usually disk I/O).\nThis gives a high-level idea of resource load (or demand).\n\nThe three numbers give some idea of how load is changing over time.\n\nExcellent post on the subject: http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html',
+    format='short',
     legend_sort='current',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -495,7 +493,8 @@ grafana.dashboard.new(
 .addPanel(
   heatmapPanel.new(
     title='VM Hiccups (or idle jitters) in nanoseconds (p90)',
-    description="Tracks the hiccups detected in the VM (also known as idle jitters) measured in nanoseconds. It's present percentile 90.",
+    description=
+    'Tracks the hiccups detected in the VM (also known as idle jitters) measured in nanoseconds. The 90ht percentile is presented.\n\nFor more info: https://www.azul.com/jhiccup/',
     color_cardColor='#b4ff00',
     color_colorScale='sqrt',
     color_colorScheme='interpolateBlues',
@@ -523,23 +522,10 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 24 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='VM CPU usage',
     description='Tracks the usage of CPU by the VM in the different typical views.',
     format='percent',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -572,23 +558,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 25 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Process CPU usage',
     description='Tracks the usage of CPU by the app in the different typical views.',
     format='percent',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -613,23 +586,10 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 37 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Host Memory',
     description='Tracks the total memory available Vs. the amount of used memory.',
     format='decbytes',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -648,23 +608,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 38 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Swap Memory',
     description='Tracks the total swap memory available Vs. the amount of used swap memory.',
     format='decbytes',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -689,23 +636,10 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 52 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Read / Write bandwidth',
     description='Tracks incoming and outgoing data through the network interfaces.',
     format='Bps',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -732,23 +666,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 53 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Failed Read / Write packets',
     description='Tracks incoming and outgoing failed packets on all network interfaces.',
     format='Bps',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -781,23 +702,10 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 65 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Disk usage',
     description='Tracks usage of disk.',
     format='percentunit',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -809,23 +717,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 66 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Data transferred',
     description='Tracks the amount of data transferred to disk device.',
     format='Bps',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -852,23 +747,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 72 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Disk I/O (ops/sec)',
     description='Tracks the number of completed disk I/O operations.',
     format='ops',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -901,23 +783,10 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 84 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Heap',
     description='Tracks the amount of memory used by the JVM heap.',
     format='decbytes',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -943,23 +812,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 12, x: 0, y: 85 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Off-Heap',
     description='Tracks the amount of memory used by the JVM outside the heap.',
     format='decbytes',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -992,23 +848,12 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 12, x: 12, y: 85 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Garbage Collection',
     description='Tracks the distribution of GC events duration',
     format='s',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
+    lines=false,
+    points=true,
   )
   .addTarget(
     prometheus.target(
@@ -1026,23 +871,10 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 97 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Number Of Threads',
     description='Tracks the number of threads in use.',
     format='decbytes',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -1054,22 +886,9 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 0, y: 98 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Number Of Tasks Completed',
     format='short',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -1081,22 +900,9 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 8, y: 98 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Queue Size',
     format='short',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -1108,23 +914,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 16, y: 98 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Maximum Number of Threads',
     description='Tracks maximum number of Threads of the executors.',
     format='short',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -1136,23 +929,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 0, y: 104 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Minimum Number of Threads',
     description='Tracks minimum number of Threads of the executors.',
     format='short',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(
@@ -1164,23 +944,10 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 8, y: 104 },
 )
 .addPanel(
-  graphPanel.new(
+  common_extended_panel(
     title='Executor parallelism',
     description='Tracks executor parallelism.',
     format='short',
-    legend_show=true,
-    legend_values=true,
-    legend_min=true,
-    legend_max=true,
-    legend_current=true,
-    legend_total=false,
-    legend_avg=true,
-    legend_alignAsTable=true,
-    legend_rightSide=false,
-    legend_sort='max',
-    legend_sortDesc=true,
-    lines=true,
-    linewidth=1,
   )
   .addTarget(
     prometheus.target(

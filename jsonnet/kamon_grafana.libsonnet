@@ -1,6 +1,51 @@
 local grafana = import 'grafonnet-lib/grafonnet/grafana.libsonnet';
 
 {
+  template:: {
+    prometheus_datasource():: self + grafana.template.datasource(
+      'PROMETHEUS_DS',
+      'prometheus',
+      'Prometheus',
+      hide='label',
+    ),
+    job(
+      includeAll=true,
+      multi=true,
+      query,
+    ):: self + grafana.template.new(
+      'job',
+      '$PROMETHEUS_DS',
+      query=query,
+      label='Job',
+      refresh='load',
+      includeAll=includeAll,
+      multi=multi,
+    ),
+    instance(
+      includeAll=true,
+      multi=true,
+    ):: self +
+        grafana.template.new(
+          'instance',
+          '$PROMETHEUS_DS',
+          query='label_values(up{job=~"$job"},instance)',
+          label='Instance',
+          refresh='load',
+          includeAll=includeAll,
+          multi=multi,
+        ),
+    interval(
+      query='1m,2m,5m,10m,30m,1h,6h,12h,1d,7d,14d,30d',
+    ):: self +
+        grafana.template.interval(
+          name='interval',
+          query=query,
+          current='1m',
+          label='Interval',
+          auto_count=0,
+        ),
+  },
+
   gauge:: {
     new(
       title,
