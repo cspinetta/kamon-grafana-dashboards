@@ -8,6 +8,7 @@ local singlestat = grafana.singlestat;
 local gauge = grafana.gauge;
 local prometheus = grafana.prometheus;
 local kamon_grafana = import 'kamon_grafana.libsonnet';
+local version = import 'version.libsonnet';
 
 local common_extended_panel(
   title,
@@ -58,6 +59,18 @@ grafana.dashboard.new(
   time_from='now-1h',
   description='System metrics dashboard for apps instrumented with Kamon 2.x',
   tags=['kamon', 'prometheus', 'system-metrics'],
+)
+.addRequired(
+  id='grafana',
+  type='grafana',
+  name='Grafana',
+  version='7.0.0',
+)
+.addRequired(
+  id='prometheus',
+  type='datasource',
+  name='Prometheus',
+  version='1.0.0',
 )
 .addTemplate(
   kamon_grafana.template.prometheus_datasource()
@@ -957,4 +970,4 @@ grafana.dashboard.new(
     )
   ),
   gridPos={ h: 6, w: 8, x: 16, y: 104 },
-)
+) + version

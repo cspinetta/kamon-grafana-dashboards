@@ -8,17 +8,23 @@ All dashboards have the following variables:
 * **PROMETHEUS_DS**: available Prometheus datasources.
 * **job**: Prometheus jobs with Kamon instrumentation. Multiple selections is enabled.
 * **instance**: Prometheus instances belonging to the selected jobs.
-* **interval**: interval time to use in the queries: `[1m,2m,5m,10m,30m,1h,6h,12h,1d,7d,14d,30d]`
+* **interval**: interval time to use in the queries:  1m, 2m, 5m, 10m, 30m, 1h, 6h, 12h, 1d, 7d, 14d, 30d.
 
-Jobs and instances are Prometheus terms. [More info](https://prometheus.io/docs/concepts/jobs_instances/#jobs-and-instances)
+Jobs and instances are in [Prometheus terms].
+
+The [Prometheus datasources] will be detected and listed automatically on the variable *PROMETHEUS_DS*.
+
+If the app metrics follows the [Prometheus convention] for job and instance labels, the app will be listed automatically on the variable *job* as well as the associated instances on the variable *instance*. If you have other labels to identify your instances you will need to adapt the variable *instance*.
 
 ### Dashboards
 
 * **System metrics**
 
-This dashboard requires the apps to be instrumented with `Kamon 2.x` and `kamon-system-metrics` module.
+This dashboard shows both system metrics and JVM metrics for apps instrumented with [Kamon 2.x] using [Prometheus].
 
-**Some screenshots:**
+It requires the apps to be instrumented with [Kamon 2.x] and [kamon-system-metrics] module.
+
+**Screenshots:**
 
 ![dash-system-overview](assets/system-metrics-dash_overview.png)
 
@@ -56,3 +62,9 @@ make fix-fmt
 [Jsonnet]: https://jsonnet.org/
 [GNU Make]: https://www.gnu.org/software/make/
 [Grafonnet-lib]: https://github.com/grafana/grafonnet-lib
+[Prometheus]: https://prometheus.io/
+[Kamon 2.x]: https://github.com/kamon-io/Kamon
+[kamon-system-metrics]: https://kamon.io/docs/latest/instrumentation/system/host-metrics/
+[Prometheus terms]: https://prometheus.io/docs/concepts/jobs_instances/#jobs-and-instances
+[Prometheus convention]: https://prometheus.io/docs/concepts/jobs_instances/#jobs-and-instances
+[Prometheus datasources]: https://grafana.com/docs/grafana/latest/features/datasources/prometheus/
