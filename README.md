@@ -38,6 +38,11 @@ This dashboard shows metrics for both the server and client side.
 
 It requires the apps to be instrumented with [Kamon 2.x] and any module with instrumentation for server and client side, such as `kamon-akka-http` and `kamon-play`.
 
+It requires an action at the first time is imported: specify a properly value for the hidden variable `app_filter` in order to be able to list properly the jobs with kamon instrumentation.
+An example:
+
+Suppose you have the apps `app-1`, `app-2` and `app-3` instrumented with `Kamon` and they are scrapped by `Prometheus` using jobs with the same names, so there have to be the jobs `app-1`, `app-2` and `app-3` on `Prometheus`. In this case, a good value for the custom variable `app_filter` would be `app-1.*|app-2.*|app-3.*`. Take in account that this value will be used to load the query variable `job` whose query expression is `label_values(up{job=~"$app_filter"}, cluster)`.
+
 **Screenshots:**
 
 ![dash-api-overview](assets/api-metrics-dash_api_overview.png)
