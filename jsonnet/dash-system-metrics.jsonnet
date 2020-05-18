@@ -9,49 +9,9 @@ local gauge = grafana.gauge;
 local prometheus = grafana.prometheus;
 local kamon_grafana = import 'kamon_grafana.libsonnet';
 local version = import 'version.libsonnet';
+local colors = import 'colors.libsonnet';
 
-local common_extended_panel(
-  title,
-  description=null,
-  format,
-  legend_show=true,
-  legend_values=true,
-  legend_min=true,
-  legend_max=true,
-  legend_current=true,
-  legend_total=false,
-  legend_avg=true,
-  legend_alignAsTable=true,
-  legend_rightSide=false,
-  legend_sort='max',
-  legend_sortDesc=true,
-  lines=true,
-  linewidth=1,
-  points=false,
-  pointradius=2,
-      ) =
-  {} + graphPanel.new(
-    title=title,
-    description=description,
-    format=format,
-    legend_show=legend_show,
-    legend_values=legend_values,
-    legend_min=legend_min,
-    legend_max=legend_max,
-    legend_current=legend_current,
-    legend_total=legend_total,
-    legend_avg=legend_avg,
-    legend_alignAsTable=legend_alignAsTable,
-    legend_rightSide=legend_rightSide,
-    legend_sort=legend_sort,
-    legend_sortDesc=legend_sortDesc,
-    lines=lines,
-    linewidth=linewidth,
-    points=points,
-    pointradius=pointradius,
-  );
-
-// Grafana color: https://grafana.com/docs/grafana/latest/packages_api/data/color/
+local load_average_description = 'Tracks the system load average in 1m / 5m / 15m.\n\nThey indicate the average number of tasks (processes) wanting to run in the last 1m / 5m / 15m.\n\nOn Linux systems, these numbers is approximated and include processes wanting to run on the CPUs, as well as processes blocked in uninterruptible I/O (usually disk I/O).\nThis gives a high-level idea of resource load (or demand).\n\nThe three numbers give some idea of how load is changing over time.\n\nExcellent post on the subject: http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html';
 
 grafana.dashboard.new(
   'System metrics dashboard',
@@ -98,162 +58,240 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 0 },
 )
 .addPanel(
-  singlestat.new(
-    'Uptime',
-    format='percentunit',
-    description='Tracks the uptime in the last 7 days.',
-    datasource='-- Mixed --',
-    valueName='current',
-    colorBackground=true,
-    colorValue=false,
-    thresholds='0.2,0.6',
-    colors=[
-      'rgb(0, 0, 0)',
-      'rgb(33, 82, 27)',
-      'rgb(55, 135, 45)',
-    ],
-    sparklineShow=false,
-    gaugeMinValue=0,
-    gaugeMaxValue=100,
-    gaugeThresholdMarkers=true,
-    gaugeThresholdLabels=false,
+  kamon_grafana.bargauge.new(
+    title='System resources overview',
+    description='System resources usage',
+    datasource='$PROMETHEUS_DS',
+    options_orientation='horizontal',
+    options_displayMode='lcd',
+    options_showUnfilled=true,
+  )
+  .add_field_config(
+    field_config=kamon_grafana.barstats_field_config(
+      unit='percentunit',
+      min=0,
+      max=1,
+      decimals=2,
+      thresholds=kamon_grafana.stats_thresholds.new(
+        'percentage',
+        [
+          { color: colors.dark_yellow, value: null },
+          { color: colors.dark_green, value: 50 },
+          { color: colors.dark_red, value: 80 },
+        ],
+      ),
+    ).addOverride(
+      matcher_options='CPU usage',
+      properties=[
+        {
+          id: 'unit',
+          value: 'percent',
+        },
+        {
+          id: 'min',
+          value: 0,
+        },
+        {
+          id: 'max',
+          value: 100,
+        },
+      ]
+    )
   )
   .addTarget(
     prometheus.target(
-      'avg_over_time(up{instance=~"$instance"}[7d])',
+      'sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="combined"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="combined"}[$interval]))',
+      legendFormat='CPU usage',
       datasource='$PROMETHEUS_DS',
     )
-  ), gridPos={ h: 5, w: 2, x: 0, y: 1 }
-)
-.addPanel(
-  kamon_grafana.gauge.new(
-    title='System Memory Usage',
-    description='Usage of system memory.',
-    datasource='-- Mixed --',
-    calc='lastNotNull',
-    unit_format='percentunit',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      'percentage',
-      [
-        { color: 'semi-dark-green', value: null },
-        { color: 'semi-dark-red', value: 80 },
-      ],
-    ),
   )
   .addTarget(
     prometheus.target(
-      expr='host_memory_used_bytes{instance=~"$instance"}\n/\nhost_memory_total_bytes{instance=~"$instance"}\n       ',
+      'host_memory_used_bytes{instance=~"$instance"}\n/\nhost_memory_total_bytes{instance=~"$instance"}',
+      legendFormat='Memory utilization',
       datasource='$PROMETHEUS_DS',
     )
-  ), gridPos={ h: 5, w: 4, x: 2, y: 1 }
-)
-.addPanel(
-  kamon_grafana.cpu_stats_panel.new(
-    title='CPU | %usr+%system',
-    description='Tracks the current time the CPU is busy both for user and kernel mode.',
-    query_expression='sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="combined"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="combined"}[$interval]))',
+  )
+  .addTarget(
+    prometheus.target(
+      '(host_swap_memory_used_bytes{instance=~"$instance"}\n/\nhost_swap_memory_total_bytes{instance=~"$instance"}) OR on() vector(0)',
+      legendFormat='SWAP utilization',
+      datasource='$PROMETHEUS_DS',
+      instant=true,
+    )
   ),
-  gridPos={ h: 5, w: 2, x: 6, y: 1 },
+  gridPos={ h: 3, w: 6, x: 0, y: 1 },
 )
 .addPanel(
   kamon_grafana.cpu_stats_panel.new(
-    title='CPU | %usr',
+    title='CPU %usr',
     description='Tracks the current time the CPU is busy on user mode.',
-    query_expression='sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="user"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="user"}[$interval]))',
+    query_expression=
+    'sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="user"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="user"}[$interval]))',
   ),
-  gridPos={ h: 5, w: 2, x: 8, y: 1 },
+  gridPos={ h: 3, w: 2, x: 6, y: 1 },
 )
 .addPanel(
   kamon_grafana.cpu_stats_panel.new(
-    title='CPU | %system',
+    title='CPU %system',
     description='Tracks the current time the CPU is busy on system mode.',
-    query_expression='sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="system"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="system"}[$interval]))',
+    query_expression=
+    'sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="system"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="system"}[$interval]))',
   ),
-  gridPos={ h: 5, w: 2, x: 10, y: 1 },
+  gridPos={ h: 3, w: 2, x: 8, y: 1 },
 )
 .addPanel(
   kamon_grafana.cpu_stats_panel.new(
-    title='CPU | %wait',
+    title='CPU %wait',
     description='Tracks the current time the CPU is stuck waiting for IO.\n\nIf this value is high, the disk might be the bottleneck.',
-    query_expression='sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="wait"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="wait"}[$interval]))',
+    query_expression=
+    'sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="wait"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="wait"}[$interval]))',
   ),
-  gridPos={ h: 5, w: 2, x: 12, y: 1 },
+  gridPos={ h: 3, w: 2, x: 10, y: 1 },
 )
 .addPanel(
-  kamon_grafana.cpu_stats_panel.new(
-    title='CPU | %steal',
-    description='Tracks the current time the CPU is stolen by some process outside the VM.\n\nIf this value is high, it could be caused either by the supervisor is very busy, by a noisy neighbor or by some limitation on the quota assigned by the virtualization service.',
-    query_expression='sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="stolen"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="stolen"}[$interval]))',
-  ),
-  gridPos={ h: 5, w: 2, x: 14, y: 1 },
-)
-.addPanel(
-  kamon_grafana.stat.new(
-    title='Net inbound',
-    description='Tracks the incoming data through the network.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new(
-      orientation='horizontal'
-    ).add_reduce_options(),
+  kamon_grafana.bargauge.new(
+    title='Network usage',
+    description='Traks network usage',
+    datasource='$PROMETHEUS_DS',
+    options_orientation='horizontal',
+    options_displayMode='lcd',
+    options_showUnfilled=true,
+  )
+  .add_field_config(
+    field_config=kamon_grafana.barstats_field_config(
+      unit='Bps',
+      min=0,
+      decimals=2,
+    ).addOverride(
+      matcher_options='read',
+      properties=[
+        {
+          id: 'thresholds',
+          value: {
+            mode: 'percentage',
+            steps: [
+              {
+                color: colors.dark_green,
+                value: null,
+              },
+            ],
+          },
+        },
+      ]
+    ).addOverride(
+      matcher_options='write',
+      properties=[
+        {
+          id: 'thresholds',
+          value: {
+            mode: 'percentage',
+            steps: [
+              {
+                color: colors.dark_red,
+                value: null,
+              },
+            ],
+          },
+        },
+      ]
+    )
   )
   .addTarget(
     prometheus.target(
       'rate(host_network_data_read_bytes_total{instance=~"$instance"}[$interval])',
+      legendFormat='read',
       datasource='$PROMETHEUS_DS',
     )
   )
-  .add_field_config(
-    unit='Bps',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'semi-dark-green', value: null },
-      ],
-    ),
+  .addTarget(
+    prometheus.target(
+      'rate(host_network_data_write_bytes_total{instance=~"$instance"}[$interval])',
+      legendFormat='write',
+      datasource='$PROMETHEUS_DS',
+    )
   ),
-  gridPos={ h: 5, w: 3, x: 16, y: 1 },
+  gridPos={ h: 3, w: 7, x: 12, y: 1 },
 )
 .addPanel(
-  kamon_grafana.stat.new(
-    title='Failed read packets',
-    description='Tracks ratio for failed read packets.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new(
-      orientation='horizontal'
-    ).add_reduce_options(),
+  kamon_grafana.bargauge.new(
+    title='Retransmits',
+    description='Tracks ratio for failed network packets',
+    datasource='$PROMETHEUS_DS',
+    options_orientation='horizontal',
+    options_displayMode='gradient',
+    options_showUnfilled=true,
+  )
+  .add_field_config(
+    field_config=kamon_grafana.barstats_field_config(
+      unit='percentunit',
+      min=0,
+      max=1,
+    ).addOverride(
+      matcher_options='read',
+      properties=[
+        {
+          id: 'thresholds',
+          value: {
+            mode: 'percentage',
+            steps: [
+              {
+                color: colors.dark_green,
+                value: null,
+              },
+            ],
+          },
+        },
+      ]
+    ).addOverride(
+      matcher_options='write',
+      properties=[
+        {
+          id: 'thresholds',
+          value: {
+            mode: 'percentage',
+            steps: [
+              {
+                color: colors.dark_red,
+                value: null,
+              },
+            ],
+          },
+        },
+      ]
+    )
   )
   .addTarget(
     prometheus.target(
       'sum(host_network_packets_read_failed_total{instance=~"$instance"})\n/\nsum(host_network_packets_read_total_total{instance=~"$instance"})',
+      legendFormat='read',
       datasource='$PROMETHEUS_DS',
     )
   )
-  .add_field_config(
-    unit='percentunit',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'light-green', value: null },
-        { color: 'green', value: 0.1 },
-        { color: 'dark-green', value: 0.2 },
-      ],
-    ),
+  .addTarget(
+    prometheus.target(
+      'sum(host_network_packets_write_failed_total{instance=~"$instance"})\n/\nsum(host_network_packets_write_total_total{instance=~"$instance"})',
+      legendFormat='write',
+      datasource='$PROMETHEUS_DS',
+    )
   ),
-  gridPos={ h: 5, w: 2, x: 19, y: 1 },
+  gridPos={ h: 3, w: 2, x: 19, y: 1 },
 )
 .addPanel(
   kamon_grafana.stat.new(
-    'Usage of Disk Space',
-    description='Tracks usage of space on Disk.',
-    datasource='-- Mixed --',
+    'Top 2 Disk usage',
+    description='Tracks usage of space on Disk',
+    datasource='$PROMETHEUS_DS',
     options=kamon_grafana.stats_options.new(
       orientation='horizontal'
     ).add_reduce_options(),
   )
   .addTarget(
     prometheus.target(
-      'sum by(mount)(host_storage_mount_space_used_bytes{instance=~"$instance"})\n/\nsum by(mount)(host_storage_mount_space_total_bytes{instance=~"$instance"})',
+      'topk(2, (sum by(mount)(host_storage_mount_space_used_bytes{instance=~"$instance"})\n/\nsum by(mount)(host_storage_mount_space_total_bytes{instance=~"$instance"})))',
       datasource='$PROMETHEUS_DS',
+      legendFormat='{{mount}}',
+      instant=true,
     )
   )
   .add_field_config(
@@ -261,108 +299,149 @@ grafana.dashboard.new(
     thresholds=kamon_grafana.stats_thresholds.new(
       mode='absolute',
       steps=[
-        { color: 'green', value: null },
-        { color: 'red', value: 0.8 },
+        { color: colors.dark_green, value: null },
+        { color: colors.dark_yellow, value: 0.5 },
+        { color: colors.dark_red, value: 0.8 },
       ],
     ),
   ),
-  gridPos={ h: 10, w: 3, x: 21, y: 1 },
+  gridPos={ h: 6, w: 3, x: 21, y: 1 },
 )
 .addPanel(
-  kamon_grafana.stat.new(
-    'Load Avg. 1m',
-    description='Tracks the average usage of CPU in the last minute.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new().add_reduce_options(),
+  kamon_grafana.bargauge.new(
+    title='System load average',
+    description=load_average_description,
+    datasource='$PROMETHEUS_DS',
+    options_orientation='horizontal',
+    options_displayMode='lcd',
+    options_showUnfilled=true,
+  )
+  .add_field_config(
+    field_config=kamon_grafana.barstats_field_config(
+      unit='short',
+      min=0,
+      decimals=2,
+      thresholds=kamon_grafana.stats_thresholds.new(
+        mode='absolute',
+        steps=[
+          { color: colors.semi_dark_blue, value: null },
+        ],
+      ),
+    )
   )
   .addTarget(
     prometheus.target(
       'host_load_average{instance=~"$instance", period="1m"}',
+      legendFormat='Avg. 1m',
       datasource='$PROMETHEUS_DS',
     )
-  )
-  .add_field_config(
-    unit='short',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'dark-blue', value: null },
-      ],
-    ),
-  ),
-  gridPos={ h: 5, w: 2, x: 0, y: 6 },
-)
-.addPanel(
-  kamon_grafana.stat.new(
-    'Load Avg. 5m',
-    description='Tracks the average usage of CPU in the last 5 minutes.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new().add_reduce_options(),
   )
   .addTarget(
     prometheus.target(
       'host_load_average{instance=~"$instance", period="5m"}',
+      legendFormat='Avg. 5m',
       datasource='$PROMETHEUS_DS',
     )
-  )
-  .add_field_config(
-    unit='short',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'dark-blue', value: null },
-      ],
-    ),
-  ),
-  gridPos={ h: 5, w: 2, x: 2, y: 6 },
-)
-.addPanel(
-  kamon_grafana.stat.new(
-    'Load Avg. 15m',
-    description='Tracks the average usage of CPU in the last 15 minutes.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new().add_reduce_options(),
   )
   .addTarget(
     prometheus.target(
       'host_load_average{instance=~"$instance", period="15m"}',
+      legendFormat='Avg. 15m',
+      datasource='$PROMETHEUS_DS',
+    )
+  ),
+  gridPos={ h: 3, w: 6, x: 0, y: 4 },
+)
+.addPanel(
+  kamon_grafana.cpu_stats_panel.new(
+    title='Proc %usr',
+    description='Tracks the current time the CPU is busy by the process in user mode.',
+    query_expression=
+    'sum(rate(process_cpu_usage_sum{instance=~"$instance", mode="user"}[$interval]))\n/\nsum(rate(process_cpu_usage_count{instance=~"$instance", mode="user"}[$interval]))',
+  ),
+  gridPos={ h: 3, w: 2, x: 6, y: 4 },
+)
+.addPanel(
+  kamon_grafana.cpu_stats_panel.new(
+    title='Proc %system',
+    description='Tracks the current time the CPU is busy by the process in kernel mode.',
+    query_expression=
+    'sum(rate(process_cpu_usage_sum{instance=~"$instance", mode="system"}[$interval]))\n/\nsum(rate(process_cpu_usage_count{instance=~"$instance", mode="system"}[$interval]))',
+  ),
+  gridPos={ h: 3, w: 2, x: 8, y: 4 },
+)
+.addPanel(
+  kamon_grafana.cpu_stats_panel.new(
+    title='CPU %steal',
+    description='Tracks the current time the CPU is stolen by some process outside the VM.\n\nIf this value is high, it could be caused either by the supervisor is very busy, by a noisy neighbor or by some limitation on the quota assigned by the virtualization service.',
+    query_expression=
+    'sum(rate(host_cpu_usage_sum{instance=~"$instance", mode="stolen"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="stolen"}[$interval]))',
+  ),
+  gridPos={ h: 3, w: 2, x: 10, y: 4 },
+)
+.addPanel(
+  kamon_grafana.bargauge.new(
+    title='Disk usage',
+    description='Traks the usage of disk space',
+    datasource='$PROMETHEUS_DS',
+    options_orientation='horizontal',
+    options_displayMode='lcd',
+    options_showUnfilled=true,
+  )
+  .add_field_config(
+    field_config=kamon_grafana.barstats_field_config(
+      unit='Bps',
+      min=0,
+      decimals=2,
+    ).addOverride(
+      matcher_options='read',
+      properties=[
+        {
+          id: 'thresholds',
+          value: {
+            mode: 'percentage',
+            steps: [
+              {
+                color: colors.dark_green,
+                value: null,
+              },
+            ],
+          },
+        },
+      ]
+    ).addOverride(
+      matcher_options='write',
+      properties=[
+        {
+          id: 'thresholds',
+          value: {
+            mode: 'percentage',
+            steps: [
+              {
+                color: colors.dark_red,
+                value: null,
+              },
+            ],
+          },
+        },
+      ]
+    )
+  )
+  .addTarget(
+    prometheus.target(
+      'rate(host_storage_device_data_read_bytes_total{instance=~"$instance"}[$interval])',
+      legendFormat='read',
       datasource='$PROMETHEUS_DS',
     )
   )
-  .add_field_config(
-    unit='short',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'dark-blue', value: null },
-      ],
-    ),
+  .addTarget(
+    prometheus.target(
+      'rate(host_storage_device_data_write_bytes_total{instance=~"$instance"}[$interval])',
+      legendFormat='write',
+      datasource='$PROMETHEUS_DS',
+    )
   ),
-  gridPos={ h: 5, w: 2, x: 4, y: 6 },
-)
-.addPanel(
-  kamon_grafana.cpu_stats_panel.new(
-    title='Proc | %usr+%system',
-    description='Tracks the current time the CPU is busy by the process executing both in user and in kernel mode.',
-    query_expression='sum(rate(process_cpu_usage_sum{instance=~"$instance", mode="combined"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="combined"}[$interval]))',
-  ),
-  gridPos={ h: 5, w: 2, x: 6, y: 6 },
-)
-.addPanel(
-  kamon_grafana.cpu_stats_panel.new(
-    title='Proc | %usr',
-    description='Tracks the current time the CPU is busy by the process in user mode.',
-    query_expression='sum(rate(process_cpu_usage_sum{instance=~"$instance", mode="user"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="user"}[$interval]))',
-  ),
-  gridPos={ h: 5, w: 2, x: 8, y: 6 },
-)
-.addPanel(
-  kamon_grafana.cpu_stats_panel.new(
-    title='Proc | %system',
-    description='Tracks the current time the CPU is busy by the process in kernel mode.',
-    query_expression='sum(rate(process_cpu_usage_sum{instance=~"$instance", mode="system"}[$interval]))\n/\nsum(rate(host_cpu_usage_count{instance=~"$instance", mode="system"}[$interval]))',
-  ),
-  gridPos={ h: 5, w: 2, x: 10, y: 6 },
+  gridPos={ h: 3, w: 7, x: 12, y: 4 },
 )
 .addPanel(
   kamon_grafana.stat.new(
@@ -386,85 +465,7 @@ grafana.dashboard.new(
       ],
     ),
   ),
-  gridPos={ h: 5, w: 2, x: 12, y: 6 },
-)
-.addPanel(
-  kamon_grafana.stat.new(
-    'Max FDs',
-    description='Max number of file descriptors available for the process.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new().add_reduce_options(),
-  )
-  .addTarget(
-    prometheus.target(
-      'process_ulimit_file_descriptors_max{instance=~"$instance"}',
-      datasource='$PROMETHEUS_DS',
-    )
-  )
-  .add_field_config(
-    unit='short',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'dark-blue', value: null },
-      ],
-    ),
-  ),
-  gridPos={ h: 5, w: 2, x: 14, y: 6 },
-)
-.addPanel(
-  kamon_grafana.stat.new(
-    title='Net outbound',
-    description='Tracks the outgoing data through the network.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new(
-      orientation='horizontal'
-    ).add_reduce_options(),
-  )
-  .addTarget(
-    prometheus.target(
-      'rate(host_network_data_write_bytes_total{instance=~"$instance"}[$interval])',
-      datasource='$PROMETHEUS_DS',
-    )
-  )
-  .add_field_config(
-    unit='Bps',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'semi-dark-red', value: null },
-      ],
-    ),
-  ),
-  gridPos={ h: 5, w: 3, x: 16, y: 6 },
-)
-.addPanel(
-  kamon_grafana.stat.new(
-    title='Failed written packets',
-    description='Tracks ratio for failed written packets.',
-    datasource='-- Mixed --',
-    options=kamon_grafana.stats_options.new(
-      orientation='horizontal'
-    ).add_reduce_options(),
-  )
-  .addTarget(
-    prometheus.target(
-      'sum(host_network_packets_read_failed_total{instance=~"$instance"})\n/\nsum(host_network_packets_read_total_total{instance=~"$instance"})',
-      datasource='$PROMETHEUS_DS',
-    )
-  )
-  .add_field_config(
-    unit='percentunit',
-    thresholds=kamon_grafana.stats_thresholds.new(
-      mode='absolute',
-      steps=[
-        { color: 'light-red', value: null },
-        { color: 'red', value: 0.1 },
-        { color: 'dark-red', value: 0.2 },
-      ],
-    ),
-  ),
-  gridPos={ h: 5, w: 2, x: 19, y: 6 },
+  gridPos={ h: 3, w: 2, x: 19, y: 4 },
 )
 .addPanel(
   row.new(
@@ -473,10 +474,9 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 11 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='System load average in 1m / 5m / 15m',
-    description=
-    'Tracks the system load average in 1m / 5m / 15m.\n\nThey indicate the average number of tasks (processes) wanting to run in the last 1m / 5m / 15m.\n\nOn Linux systems, these numbers is approximated and include processes wanting to run on the CPUs, as well as processes blocked in uninterruptible I/O (usually disk I/O).\nThis gives a high-level idea of resource load (or demand).\n\nThe three numbers give some idea of how load is changing over time.\n\nExcellent post on the subject: http://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html',
+    description=load_average_description,
     format='short',
     legend_sort='current',
   )
@@ -535,7 +535,7 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 24 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='VM CPU usage',
     description='Tracks the usage of CPU by the VM in the different typical views.',
     format='percent',
@@ -571,7 +571,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 25 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Process CPU usage',
     description='Tracks the usage of CPU by the app in the different typical views.',
     format='percent',
@@ -599,7 +599,7 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 37 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Host Memory',
     description='Tracks the total memory available Vs. the amount of used memory.',
     format='decbytes',
@@ -621,7 +621,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 38 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Swap Memory',
     description='Tracks the total swap memory available Vs. the amount of used swap memory.',
     format='decbytes',
@@ -649,7 +649,7 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 52 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Read / Write bandwidth',
     description='Tracks incoming and outgoing data through the network interfaces.',
     format='Bps',
@@ -679,7 +679,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 53 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Failed Read / Write packets',
     description='Tracks incoming and outgoing failed packets on all network interfaces.',
     format='Bps',
@@ -715,7 +715,7 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 65 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Disk usage',
     description='Tracks usage of disk.',
     format='percentunit',
@@ -730,7 +730,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 66 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Data transferred',
     description='Tracks the amount of data transferred to disk device.',
     format='Bps',
@@ -760,7 +760,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 24, x: 0, y: 72 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Disk I/O (ops/sec)',
     description='Tracks the number of completed disk I/O operations.',
     format='ops',
@@ -796,7 +796,7 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 84 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Heap',
     description='Tracks the amount of memory used by the JVM heap.',
     format='decbytes',
@@ -825,7 +825,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 12, x: 0, y: 85 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Off-Heap',
     description='Tracks the amount of memory used by the JVM outside the heap.',
     format='decbytes',
@@ -861,7 +861,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 12, x: 12, y: 85 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Garbage Collection',
     description='Tracks the distribution of GC events duration',
     format='s',
@@ -884,7 +884,7 @@ grafana.dashboard.new(
   gridPos={ h: 1, w: 24, x: 0, y: 97 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Number Of Threads',
     description='Tracks the number of threads in use.',
     format='decbytes',
@@ -899,7 +899,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 0, y: 98 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Number Of Tasks Completed',
     format='short',
   )
@@ -913,7 +913,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 8, y: 98 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Queue Size',
     format='short',
   )
@@ -927,7 +927,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 16, y: 98 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Maximum Number of Threads',
     description='Tracks maximum number of Threads of the executors.',
     format='short',
@@ -942,7 +942,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 0, y: 104 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Minimum Number of Threads',
     description='Tracks minimum number of Threads of the executors.',
     format='short',
@@ -957,7 +957,7 @@ grafana.dashboard.new(
   gridPos={ h: 6, w: 8, x: 8, y: 104 },
 )
 .addPanel(
-  common_extended_panel(
+  kamon_grafana.graph_panel.new(
     title='Executor parallelism',
     description='Tracks executor parallelism.',
     format='short',

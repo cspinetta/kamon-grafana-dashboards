@@ -1,4 +1,4 @@
-# [WIP] Kamon Grafana Dashboards
+# Kamon Grafana Dashboards
 Source code for building Grafana dashboards with Prometheus datasource to expose
 metrics gathered by [Kamon] `2.x`.
 
@@ -28,9 +28,21 @@ It requires the apps to be instrumented with [Kamon 2.x] and [kamon-system-metri
 
 ![dash-system-overview](assets/system-metrics-dash_overview.png)
 
-![dash-system-disk](assets/system-metrics-dash_health.png)
+![dash-system-health](assets/system-metrics-dash_health.png)
 
 ![dash-system-disk](assets/system-metrics-dash_disks.png)
+
+* **API metrics**
+
+This dashboard shows metrics for both the server and client side.
+
+It requires the apps to be instrumented with [Kamon 2.x] and any module with instrumentation for server and client side, such as `kamon-akka-http` and `kamon-play`.
+
+**Screenshots:**
+
+![dash-api-overview](assets/api-metrics-dash_api_overview.png)
+
+![dash-client-metrics](assets/api-metrics-dash_client_metrics.png)
 
 ### Generate dashboards
 
