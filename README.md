@@ -20,6 +20,8 @@ If the app metrics follows the [Prometheus convention] for job and instance labe
 
 #### **System metrics**
 
+Published at Grafana as [Kamon 2.x - System metrics dashboard](https://grafana.com/grafana/dashboards/12315)
+
 This dashboard shows both system metrics and JVM metrics for apps instrumented with [Kamon 2.x] using [Prometheus].
 
 It requires the apps to be instrumented with [Kamon 2.x] and [kamon-system-metrics] module.
@@ -46,6 +48,8 @@ Almost all metrics have a description.
 ![dash-system-disk](assets/system-metrics-dash_disks.png)
 
 #### **API metrics**
+
+Published at Grafana as [Kamon 2.x - API dashboard](https://grafana.com/grafana/dashboards/12317)
 
 This dashboard shows metrics for both the server and client side.
 
