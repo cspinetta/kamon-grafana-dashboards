@@ -44,7 +44,7 @@ grafana.dashboard.new(
 )
 .addTemplate(
   kamon_grafana.template.job(
-    query='label_values(up{job=~"$app_filter"}, cluster)',
+    query='label_values(up{job=~"$app_filter"}, job)',
   ),
 )
 .addTemplate(
